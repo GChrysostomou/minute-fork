@@ -177,6 +177,39 @@ class Transcription(BaseTableMixin, table=True):
         cascade_delete=True,
         sa_relationship_kwargs={"order_by": col(Chat.created_datetime).desc()},
     )
+    workflow_runs: list["WorkflowRun"] = Relationship(
+        back_populates="transcription",
+        cascade_delete=True,
+    )
+
+
+class WorkflowStatus(StrEnum):
+    """Lifecycle status for a WorkflowRun.
+
+    Tracks the overall progress of a single workflow execution against a
+    transcription, from initial queuing through to worker processing,
+    human confirmation, and final outcome.
+    """
+
+    AWAITING_START = auto()
+    IN_PROGRESS = auto()
+    AWAITING_CONFIRMATION = auto()
+    COMPLETED = auto()
+    FAILED = auto()
+
+
+class WorkflowActionStatus(StrEnum):
+    """Per-action status for a WorkflowAction within a WorkflowRun.
+
+    Each action starts as PENDING after the LLM proposes it.  The user then
+    approves or rejects it individually before the execute stage runs.
+    """
+
+    PENDING = auto()
+    APPROVED = auto()
+    REJECTED = auto()
+    COMPLETED = auto()
+    FAILED = auto()
 
 
 class TemplateType(StrEnum):
@@ -214,4 +247,125 @@ class UserTemplate(BaseTableMixin, table=True):
         back_populates="user_template",
         passive_deletes="all",
         sa_relationship_kwargs={"order_by": TemplateQuestion.position},
+    )
+
+
+class WorkflowRun(BaseTableMixin, table=True):
+    """Tracks a single execution of a workflow against a transcription.
+
+    Progresses through WorkflowStatus from initial queuing, through LLM-driven
+    action proposal, user confirmation, and final execution against the external service.
+    """
+
+    __tablename__ = "workflow_run"
+    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
+    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    transcription_id: UUID = Field(
+        foreign_key="transcription.id",
+        ondelete="CASCADE",
+        description="The transcription this workflow run is operating on.",
+    )
+    transcription: Mapped["Transcription"] = Relationship(back_populates="workflow_runs")
+    user_id: UUID = Field(
+        foreign_key="user.id",
+        ondelete="CASCADE",
+        description="The user who initiated this workflow run.",
+    )
+    workflow_name: str = Field(
+        description="Term identifying which Workflow implementation to use, e.g. 'github_projects'.",
+    )
+    config: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB),
+        description="Per-workflow configuration submitted by the user, e.g. GitHub project ID and repo.",
+    )
+    status: WorkflowStatus = Field(
+        default=WorkflowStatus.AWAITING_START,
+        sa_column_kwargs={"server_default": WorkflowStatus.AWAITING_START.name},
+        description="Current lifecycle stage of this run.",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Human-readable error message if the run reached FAILED status.",
+    )
+    actions: list["WorkflowAction"] = Relationship(
+        back_populates="workflow_run",
+        cascade_delete=True,
+        sa_relationship_kwargs={"order_by": "WorkflowAction.position"},
+    )
+
+
+class WorkflowAction(BaseTableMixin, table=True):
+    """A single proposed or executed action within a WorkflowRun.
+
+    Created by the worker's prepare stage; presented to the user for approval or
+    rejection before the execute stage carries them out against the external service.
+    """
+
+    __tablename__ = "workflow_action"
+    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
+    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    workflow_run_id: UUID = Field(
+        foreign_key="workflow_run.id",
+        ondelete="CASCADE",
+        description="The run this action belongs to.",
+    )
+    workflow_run: Mapped["WorkflowRun"] = Relationship(back_populates="actions")
+    position: int = Field(
+        description="Display order within the run (ascending).",
+    )
+    action_type: str = Field(
+        description="Language understood by the workflow implementation, e.g. 'create_ticket'.",
+    )
+    description: str = Field(
+        description="Human-readable summary of what this action will do, shown in the confirmation UI.",
+    )
+    payload: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB),
+        description="All data needed to execute the action, e.g. ticket title, body, and labels.",
+    )
+    status: WorkflowActionStatus = Field(
+        default=WorkflowActionStatus.PENDING,
+        sa_column_kwargs={"server_default": WorkflowActionStatus.PENDING.name},
+        description="Current state of this action, progressing from user decision through execution.",
+    )
+    result_url: str | None = Field(
+        default=None,
+        description="Link to the created or updated resource after successful execution, e.g. a GitHub issue URL.",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Human-readable error message if this action reached FAILED status.",
+    )
+
+
+class WorkflowCredential(BaseTableMixin, table=True):
+    """Stores a per-user OAuth token or PAT for an external service.
+
+    The (user_id, service_name) pair is unique — one active credential per service per user.
+    """
+
+    __tablename__ = "workflow_credential"
+    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
+    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    user_id: UUID = Field(
+        foreign_key="user.id",
+        ondelete="CASCADE",
+        description="The user this credential belongs to.",
+    )
+    service_name: str = Field(
+        description="External service this credential grants access to, e.g. 'github'.",
+    )
+    encrypted_token: str = Field(
+        description="AES-256 encrypted OAuth token or PAT stored at rest.",
+    )
+    scopes: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSONB),
+        description="OAuth scopes granted by this credential.",
+    )
+    expires_at: datetime | None = Field(
+        default=None,
+        description="Expiry time of the token, or None if it does not expire.",
     )
