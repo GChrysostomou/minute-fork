@@ -255,3 +255,47 @@ class CreateUserTemplateRequest(BaseModel):
     description: str
     type: TemplateType
     questions: list[CreateQuestion] | None = None
+
+
+class WorkflowActionResponse(BaseModel):
+    id: uuid.UUID
+    position: int
+    action_type: str
+    description: str
+    payload: dict
+    status: str  # WorkflowActionStatus value
+    result_url: str | None
+    error: str | None
+
+
+class WorkflowRunResponse(BaseModel):
+    id: uuid.UUID
+    transcription_id: uuid.UUID
+    workflow_name: str
+    status: str  # WorkflowStatus value
+    error: str | None
+    created_datetime: datetime
+    updated_datetime: datetime
+    actions: list[WorkflowActionResponse]
+
+
+class WorkflowRunCreateRequest(BaseModel):
+    transcription_id: uuid.UUID
+    workflow_name: str
+    config: dict
+
+
+class WorkflowActionDecision(BaseModel):
+    action_id: uuid.UUID
+    approved: bool
+
+
+class WorkflowExecuteRequest(BaseModel):
+    decisions: list[WorkflowActionDecision]
+
+
+class WorkflowMetadata(BaseModel):
+    name: str
+    display_name: str
+    description: str
+    config_schema: dict
