@@ -8,6 +8,7 @@ from common.services.queue_services import get_queue_service
 from common.services.queue_services.base import QueueService
 from common.settings import get_settings
 from worker.ray_recieve_service import HasBeenStopped, RayLlmService, RayTranscriptionService
+from worker.ray_workflow_service import RayWorkflowService
 from worker.signal_handler import SignalHandler
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,12 @@ class WorkerService:
             llm_worker_call = llm_worker.process.remote()
             self.actors.append(llm_worker)
             self.calls.append(llm_worker_call)
+
+        for _ in range(settings.MAX_WORKFLOW_PROCESSES):
+            workflow_worker = RayWorkflowService.remote(self.llm_queue_service, self.stopped)
+            workflow_worker_call = workflow_worker.process.remote()
+            self.actors.append(workflow_worker)
+            self.calls.append(workflow_worker_call)
 
     async def run(self) -> None:
         # note, currently a bug in python 3.12/ray that means we need to wrap the ObjectRefs in asyncio.ensure_future
@@ -80,7 +87,9 @@ def create_worker_service() -> WorkerService:
     # we init ray here so we can handle its init in testing
     ray.init(
         log_to_driver=True,
-        num_cpus=(settings.MAX_TRANSCRIPTION_PROCESSES + settings.MAX_LLM_PROCESSES + 4),
+        num_cpus=(
+            settings.MAX_TRANSCRIPTION_PROCESSES + settings.MAX_LLM_PROCESSES + settings.MAX_WORKFLOW_PROCESSES + 4
+        ),
         configure_logging=True,
         dashboard_host=settings.RAY_DASHBOARD_HOST,
         dashboard_port=8265,

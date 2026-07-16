@@ -12,7 +12,7 @@ build-pyenv:
 install:
 	cd frontend && npm install
 	brew install ffmpeg
-	poetry install --with fastapi --no-root
+	poetry install --all-extras --no-root
 	poetry run pre-commit install
 
 run-pre-commit:

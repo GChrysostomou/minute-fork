@@ -173,10 +173,16 @@ class TaskType(IntEnum):
     MINUTE = 2
     EDIT = 3
     INTERACTIVE = 4
+    WORKFLOW_PREPARE = 5
+    WORKFLOW_EXECUTE = 6
 
 
 class EditMessageData(BaseModel):
     source_id: uuid.UUID = Field(description="ID of the source message")
+
+
+class WorkflowMessageData(BaseModel):
+    workflow_run_id: uuid.UUID = Field(description="ID of the WorkflowRun to process")
 
 
 class TranscriptionJobMessageData(BaseModel):
@@ -191,7 +197,7 @@ class TranscriptionJobMessageData(BaseModel):
 class WorkerMessage(BaseModel):
     id: uuid.UUID
     type: TaskType
-    data: EditMessageData | TranscriptionJobMessageData | None = Field(default=None)
+    data: EditMessageData | TranscriptionJobMessageData | WorkflowMessageData | None = Field(default=None)
 
 
 class LLMHallucination(BaseModel):

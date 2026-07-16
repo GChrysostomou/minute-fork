@@ -66,6 +66,7 @@ class Settings(BaseSettings):
 
     MAX_TRANSCRIPTION_PROCESSES: int = Field(description="the number of transcription workers per node", default=1)
     MAX_LLM_PROCESSES: int = Field(description="the number of LLM workers per node", default=1)
+    MAX_WORKFLOW_PROCESSES: int = Field(description="the number of workflow workers per node", default=1)
 
     # if using Azure OpenAI
     AZURE_DEPLOYMENT: str | None = Field(description="Azure deployment for openAI", default=None)
