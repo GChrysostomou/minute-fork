@@ -35,6 +35,8 @@ class _ProjectContext(BaseModel):
     status_field_id: int
     # Maps column name → option ID string, e.g. {"Todo": "opt_abc", "Blocked": "opt_def"}
     status_options: dict[str, str]
+    # owner/repo derived from project items, used for issue mutations in execute_action()
+    repo: str
     items: list[_ProjectItem]
 
 
@@ -45,6 +47,7 @@ class _ProjectItem(BaseModel):
     title: str
     body: str
     url: str
+    repo: str  # owner/repo, e.g. "myorg/myrepo" — parsed from the issue html_url
     current_status: str  # column name, e.g. "Todo", "In Progress", "Blocked"
 
 
@@ -56,6 +59,8 @@ class _CreateTicket(BaseModel):
     body: str
     labels: list[str] = []
     initial_status: str = "Todo"  # must be one of the project's status option names
+    # Resolved at prepare()-time from project context — execute_action() uses this directly
+    repo: str = ""  # owner/repo, e.g. "myorg/myrepo"
 
 
 class _UpdateTicketBody(BaseModel):
@@ -65,6 +70,8 @@ class _UpdateTicketBody(BaseModel):
     issue_number: int
     title: str | None = None
     body: str | None = None
+    # Resolved at prepare()-time
+    repo: str = ""  # owner/repo
 
 
 class _MoveTicket(BaseModel):
@@ -92,6 +99,8 @@ class _CloseTicket(BaseModel):
     type: Literal["close_ticket"]
     issue_number: int
     reason: str
+    # Resolved at prepare()-time
+    repo: str = ""  # owner/repo
 
 
 class _ProposedActions(BaseModel):
@@ -211,6 +220,7 @@ async def _fetch_project_items(org: str, project_number: int, token: str) -> _Pr
                 title=content.get("title", ""),
                 body=content.get("body") or "",
                 url=content.get("html_url", content.get("url", "")),
+                repo=_repo_from_html_url(content.get("html_url", "")),
                 current_status=current_status,
             )
         )
@@ -220,9 +230,18 @@ async def _fetch_project_items(org: str, project_number: int, token: str) -> _Pr
         len(active_items),
         ", ".join(f'#{i.issue_number} "{i.title}" [{i.current_status}]' for i in active_items) or "(none)",
     )
+    # Use the repo from the first item — all items in a project are typically in the same repo.
+    # Falls back to "" if the project has no items (execute_action will fail clearly).
+    project_repo = active_items[0].repo if active_items else ""
+    if project_repo:
+        logger.info("Detected repo from project items: %s", project_repo)
+    else:
+        logger.warning("Could not detect repo from project items — execute_action will require repo in config")
+
     return _ProjectContext(
         status_field_id=status_field_id,
         status_options=status_options,
+        repo=project_repo,
         items=active_items,
     )
 
@@ -231,6 +250,16 @@ def _parse_next_link(link_header: str) -> str | None:
     """Extract the 'next' URL from a GitHub Link header."""
     match = re.search(r'<([^>]+)>;\s*rel="next"', link_header)
     return match.group(1) if match else None
+
+
+def _repo_from_html_url(html_url: str) -> str:
+    """Parse owner/repo from a GitHub issue html_url.
+
+    e.g. "https://github.com/myorg/myrepo/issues/42" → "myorg/myrepo"
+    Returns "" if the URL doesn't match the expected pattern.
+    """
+    match = re.match(r"https://github\.com/([^/]+/[^/]+)/", html_url)
+    return match.group(1) if match else ""
 
 
 def _strip_html(html: str) -> str:
@@ -277,9 +306,69 @@ def _load_latest_minutes_text(transcription_id) -> str:
     return _strip_html(minute_version.html_content)
 
 
-# ---------------------------------------------------------------------------
-# Workflow class
-# ---------------------------------------------------------------------------
+async def _execute_create_ticket(
+    client: httpx.AsyncClient,
+    payload: dict,
+    repo: str,
+    org: str,
+    project_number: int,
+    token: str,
+) -> str:
+    """Create an issue in the repo, add it to the project board, and set its initial status."""
+    owner, repo_name = repo.split("/", 1)
+
+    # 1. Create the issue
+    logger.info("POST /repos/%s/issues title=%r", repo, payload["title"])
+    response = await client.post(
+        f"/repos/{owner}/{repo_name}/issues",
+        json={
+            "title": payload["title"],
+            "body": payload.get("body", ""),
+            "labels": payload.get("labels", []),
+        },
+    )
+    logger.info("  → %s %s", response.status_code, response.reason_phrase)
+    response.raise_for_status()
+    issue = response.json()
+    html_url: str = issue["html_url"]
+    issue_id: int = issue["id"]
+
+    # 2. Add the issue to the project board
+    logger.info("POST /orgs/%s/projectsV2/%d/items issue_id=%d", org, project_number, issue_id)
+    add_response = await client.post(
+        f"/orgs/{org}/projectsV2/{project_number}/items",
+        json={"type": "Issue", "id": issue_id},
+    )
+    logger.info("  → %s %s", add_response.status_code, add_response.reason_phrase)
+    add_response.raise_for_status()
+    add_body = add_response.json()
+    new_item_id: int = add_body.get("value", {}).get("id") or add_body.get("id")
+
+    # 3. Set the initial status column if specified
+    initial_status: str = payload.get("initial_status", "")
+    if initial_status and new_item_id:
+        status_field_id, status_options = await _fetch_status_field(org, project_number, token)
+        option_id = status_options.get(initial_status)
+        if option_id:
+            logger.info(
+                "PATCH /orgs/%s/projectsV2/%d/items/%d status=%r",
+                org,
+                project_number,
+                new_item_id,
+                initial_status,
+            )
+            status_resp = await client.patch(
+                f"/orgs/{org}/projectsV2/{project_number}/items/{new_item_id}",
+                json={"fields": [{"id": status_field_id, "value": option_id}]},
+            )
+            logger.info("  → %s %s", status_resp.status_code, status_resp.reason_phrase)
+            status_resp.raise_for_status()
+        else:
+            logger.warning(
+                "initial_status %r not found in project columns — item left in default column",
+                initial_status,
+            )
+    return html_url
 
 
 class GithubProjectsWorkflow:
@@ -297,18 +386,13 @@ class GithubProjectsWorkflow:
                 "title": "Organisation",
                 "description": "GitHub organisation login — e.g. myorg",
             },
-            "repo": {
-                "type": "string",
-                "title": "Repository",
-                "description": "owner/repo — e.g. myorg/myrepo (used when creating new issues)",
-            },
             "project_number": {
                 "type": "integer",
                 "title": "Project number",
                 "description": "The GitHub Project number (visible in the project URL)",
             },
         },
-        "required": ["org", "repo", "project_number"],
+        "required": ["org", "project_number"],
     }
 
     @classmethod
@@ -360,7 +444,7 @@ class GithubProjectsWorkflow:
             len(result.close_actions),
         )
 
-        # 4. Flatten all action lists; resolve move_ticket IDs from project context
+        # 4. Flatten all action lists; resolve IDs and repo from project context
         all_proposed: list[_CreateTicket | _UpdateTicketBody | _MoveTicket | _CloseTicket] = [
             *result.create_actions,
             *result.update_actions,
@@ -390,8 +474,39 @@ class GithubProjectsWorkflow:
                         target_option_id=option_id,
                     )
                 )
-            else:
-                resolved.append(item)
+            elif isinstance(item, _CreateTicket):
+                resolved.append(
+                    _CreateTicket(
+                        type="create_ticket",
+                        title=item.title,
+                        body=item.body,
+                        labels=item.labels,
+                        initial_status=item.initial_status,
+                        repo=ctx.repo,
+                    )
+                )
+            elif isinstance(item, _UpdateTicketBody):
+                # Find the matching item to get its repo
+                matched = next((i for i in ctx.items if i.issue_number == item.issue_number), None)
+                resolved.append(
+                    _UpdateTicketBody(
+                        type="update_ticket_body",
+                        issue_number=item.issue_number,
+                        title=item.title,
+                        body=item.body,
+                        repo=matched.repo if matched else ctx.repo,
+                    )
+                )
+            elif isinstance(item, _CloseTicket):
+                matched = next((i for i in ctx.items if i.issue_number == item.issue_number), None)
+                resolved.append(
+                    _CloseTicket(
+                        type="close_ticket",
+                        issue_number=item.issue_number,
+                        reason=item.reason,
+                        repo=matched.repo if matched else ctx.repo,
+                    )
+                )
 
         # 5. Convert to WorkflowAction objects (unpersisted — caller sets workflow_run_id)
         actions = [
@@ -413,6 +528,85 @@ class GithubProjectsWorkflow:
 
     @classmethod
     async def execute_action(cls, action: WorkflowAction) -> str | None:
-        """Execute a single approved action (implemented in commit 06)."""
-        msg = "execute_action will be implemented in the next commit."
-        raise NotImplementedError(msg)
+        """Execute a single approved action against the GitHub API.
+
+        Returns the HTML URL of the affected issue, or None for move_ticket
+        (which operates on the project item, not the issue directly).
+        Raises httpx.HTTPStatusError on 4xx/5xx responses.
+        """
+        settings = get_settings()
+        token = settings.MINUTE_PAT_TOKEN
+        if not token:
+            msg = "MINUTE_PAT_TOKEN is not configured."
+            raise ValueError(msg)
+
+        payload = action.payload
+        action_type = action.action_type
+        org: str = action.workflow_run.config.get("org", "")
+        project_number: int = action.workflow_run.config.get("project_number")
+        # repo is resolved at prepare()-time from the project items and stored in the payload.
+        # We fall back to config for backwards compatibility.
+        repo: str = payload.get("repo", "") or action.workflow_run.config.get("repo", "")
+
+        headers = _gh_headers(token)
+
+        async with httpx.AsyncClient(base_url=_GITHUB_API_BASE, headers=headers) as client:
+            match action_type:
+                case "create_ticket":
+                    return await _execute_create_ticket(client, payload, repo, org, project_number, token)
+
+                case "update_ticket_body":
+                    owner, repo_name = repo.split("/", 1)
+                    issue_number: int = payload["issue_number"]
+                    body: dict = {
+                        k: v
+                        for k, v in {"title": payload.get("title"), "body": payload.get("body")}.items()
+                        if v is not None
+                    }
+                    logger.info("PATCH /repos/%s/issues/%d fields=%s", repo, issue_number, list(body))
+                    response = await client.patch(
+                        f"/repos/{owner}/{repo_name}/issues/{issue_number}",
+                        json=body,
+                    )
+                    logger.info("  → %s %s", response.status_code, response.reason_phrase)
+                    response.raise_for_status()
+                    return response.json()["html_url"]
+
+                case "move_ticket":
+                    # All IDs were resolved at prepare()-time — this is a dumb REST PATCH
+                    item_id: int = payload["item_id"]
+                    status_field_id: int = payload["status_field_id"]
+                    target_option_id: str = payload["target_option_id"]
+                    target_status: str = payload["target_status"]
+                    logger.info(
+                        "PATCH /orgs/%s/projectsV2/%d/items/%d → %r",
+                        org,
+                        project_number,
+                        item_id,
+                        target_status,
+                    )
+                    response = await client.patch(
+                        f"/orgs/{org}/projectsV2/{project_number}/items/{item_id}",
+                        json={"fields": [{"id": status_field_id, "value": target_option_id}]},
+                    )
+                    logger.info("  → %s %s", response.status_code, response.reason_phrase)
+                    response.raise_for_status()
+                    response.json()
+                    # Project item PATCH returns the item, not an issue — no html_url
+                    return None
+
+                case "close_ticket":
+                    owner, repo_name = repo.split("/", 1)
+                    issue_number = payload["issue_number"]
+                    logger.info("PATCH /repos/%s/issues/%d state=closed", repo, issue_number)
+                    response = await client.patch(
+                        f"/repos/{owner}/{repo_name}/issues/{issue_number}",
+                        json={"state": "closed", "state_reason": "completed"},
+                    )
+                    logger.info("  → %s %s", response.status_code, response.reason_phrase)
+                    response.raise_for_status()
+                    return response.json()["html_url"]
+
+                case _:
+                    msg = f"Unknown action_type: {action_type!r}"
+                    raise ValueError(msg)

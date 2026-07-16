@@ -33,6 +33,7 @@ FAKE_CONTEXT = _ProjectContext(
         "Blocked": "opt_blocked",
         "Done": "opt_done",
     },
+    repo="myorg/myrepo",
     items=[
         _ProjectItem(
             item_id=101,
@@ -40,6 +41,7 @@ FAKE_CONTEXT = _ProjectContext(
             title="Refactor",
             body="Refactor the core module.",
             url="https://github.com/myorg/myrepo/issues/1",
+            repo="myorg/myrepo",
             current_status="Todo",
         ),
         _ProjectItem(
@@ -48,6 +50,7 @@ FAKE_CONTEXT = _ProjectContext(
             title="Migration to python3.14",
             body="Migrate all services to Python 3.14.",
             url="https://github.com/myorg/myrepo/issues/2",
+            repo="myorg/myrepo",
             current_status="In Progress",
         ),
         _ProjectItem(
@@ -56,6 +59,7 @@ FAKE_CONTEXT = _ProjectContext(
             title="Claude code get access",
             body="Get org-wide access to Claude Code.",
             url="https://github.com/myorg/myrepo/issues/3",
+            repo="myorg/myrepo",
             current_status="In Progress",
         ),
     ],
@@ -233,7 +237,19 @@ def _patch_all(
 
 class TestPrepare:
     @pytest.mark.asyncio
-    async def test_move_ticket_backfills_ids(self):
+    async def test_repo_backfilled_from_context_into_payloads(self):
+        """prepare() back-fills repo from project context into create/update/close payloads."""
+        from common.workflows.gh_projects_workflow import GithubProjectsWorkflow
+
+        run = _make_run()
+        patches = _patch_all(llm_result=LLM_RESULT_MULTIPLE)
+        with patches[0], patches[1], patches[2], patches[3]:
+            actions = await GithubProjectsWorkflow.prepare(run)
+
+        for action in actions:
+            if action.action_type in ("create_ticket", "update_ticket_body", "close_ticket"):
+                assert action.payload.get("repo") == "myorg/myrepo", f"{action.action_type} payload missing repo"
+
         """prepare() resolves target_option_id and status_field_id from project context.
         The LLM only provides issue_number, item_id, and target_status."""
         from common.workflows.gh_projects_workflow import GithubProjectsWorkflow

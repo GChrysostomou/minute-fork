@@ -19,7 +19,7 @@ run-pre-commit:
 	poetry run pre-commit run --all-files
 
 test:
-	poetry run pytest tests/
+	poetry run pytest tests/ 
 
 run_frontend:
 	cd frontend && npm run dev
