@@ -122,3 +122,6 @@ certs/
 # Local-only Compose overrides (never committed)
 docker-compose.override.yaml
 docker-compose.override.yml
+
+# Throwaway scripts for testing
+.scripts

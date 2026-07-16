@@ -1,5 +1,7 @@
 # flake8: noqa: E501
 
+from typing import Any
+
 from common.database.postgres_models import DialogueEntry
 from common.format_transcript import transcript_as_index_speaker_and_utterance, transcript_as_speaker_and_utterance
 
@@ -168,12 +170,12 @@ Generate a short title for the meeting
     return [{"role": "user", "content": prompt}]
 
 
-def get_github_workflow_prompt(issues: list[dict], minutes_text: str) -> list[dict[str, str]]:
+def get_github_workflow_prompt(ctx: "Any", minutes_text: str) -> list[dict[str, str]]:
     """Build the LLM messages for GithubProjectsWorkflow.prepare().
 
     Args:
-        issues: List of open GitHub issues as plain dicts with keys:
-                number, title, body, labels, assignees, url.
+        ctx: A _ProjectContext instance containing the project node ID, status
+             field metadata, available status columns, and all project items.
         minutes_text: Plain-text meeting minutes (HTML already stripped).
 
     Returns:
@@ -181,26 +183,44 @@ def get_github_workflow_prompt(issues: list[dict], minutes_text: str) -> list[di
         chatbot.structured_chat(). The response schema is enforced by the
         caller via the _ProposedActions Pydantic model.
     """
-    formatted_issues = "\n".join(f"#{issue['number']}: {issue['title']}\n  {issue.get('body', '')}" for issue in issues)
+    available_statuses = ", ".join(f'"{s}"' for s in ctx.status_options)
+
+    body_preview_len = 300
+    formatted_items = "\n".join(
+        f"#{item.issue_number} [{item.current_status}] (item_id: {item.item_id})\n"
+        f"  Title: {item.title}\n"
+        f"  Body:  {item.body[:body_preview_len] + '...' if len(item.body) > body_preview_len else item.body}"
+        for item in ctx.items
+    )
+
     return [
         {
             "role": "system",
             "content": (
                 "You are an engineering project manager assistant.\n\n"
-                "Given the current open GitHub issues for the project and the minutes from today's\n"
-                "engineering meeting, identify what ticket changes are needed.\n\n"
-                "For each change, choose one of:\n"
-                "- create_ticket: propose a new ticket (title, body, optional labels)\n"
-                "- update_ticket: modify an existing ticket (issue_number, changes dict)\n"
-                "- close_ticket: close a resolved ticket (issue_number, reason)\n\n"
+                "You are given the current items on a GitHub Project board and the minutes "
+                "from today's engineering meeting. Identify what changes are needed.\n\n"
+                f"Available status columns: {available_statuses}\n\n"
+                "For each change, choose exactly one action type:\n\n"
+                "- create_ticket: a new issue is needed that doesn't exist yet.\n"
+                "  Fields: type, title, body, labels (optional), initial_status\n\n"
+                "- update_ticket_body: the title or body text of an existing issue needs editing.\n"
+                "  Fields: type, issue_number, title (optional), body (optional)\n\n"
+                "- move_ticket: an issue needs to move to a different status column.\n"
+                "  Fields: type, issue_number, issue_title, target_status, item_id\n"
+                "  (item_id is the integer shown in the board listing below)\n\n"
+                "- close_ticket: an issue has been resolved and should be closed.\n"
+                "  Fields: type, issue_number, reason\n\n"
                 "Rules:\n"
                 "- Only propose a change if the meeting minutes clearly support it.\n"
                 "- Do not hallucinate new information.\n"
+                "- target_status must be one of the available status columns listed above.\n"
+                "- item_id must be copied exactly from the board listing below.\n"
                 "- If no changes are needed, return an empty items list."
             ),
         },
         {
             "role": "user",
-            "content": (f"CURRENT OPEN ISSUES:\n{formatted_issues}\n\n" f"MEETING MINUTES:\n{minutes_text}"),
+            "content": (f"CURRENT PROJECT BOARD ITEMS:\n{formatted_items}\n\n" f"MEETING MINUTES:\n{minutes_text}"),
         },
     ]
