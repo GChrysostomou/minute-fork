@@ -1,16 +1,22 @@
 """Auto-discovery registry for Workflow implementations."""
 
 import importlib
+import importlib.util
 import inspect
 import logging
 import pkgutil
 import typing
+from pathlib import Path
 
-import common.workflows
 from common.types import WorkflowMetadata
 from common.workflows.base_workflow import Workflow
 
 logger = logging.getLogger(__name__)
+
+# Resolve the workflows package path without importing the package itself,
+# to avoid a circular import with __init__.py.
+_WORKFLOWS_PACKAGE_NAME = "common.workflows"
+_WORKFLOWS_PACKAGE_PATH = [str(Path(__file__).parent)]
 
 
 class WorkflowNotFoundError(KeyError):
@@ -33,8 +39,8 @@ class WorkflowManager:
         """Walk common/workflows/, import every module, and register classes that
         satisfy the Workflow Protocol. Mirrors TemplateManager.discover_templates().
         """
-        package_path = common.workflows.__path__
-        package_name = common.workflows.__name__
+        package_path = _WORKFLOWS_PACKAGE_PATH
+        package_name = _WORKFLOWS_PACKAGE_NAME
 
         for _, modname, _ in pkgutil.walk_packages(package_path, package_name + "."):
             if modname.endswith(("base_workflow", "workflow_manager")):
