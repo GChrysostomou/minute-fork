@@ -90,6 +90,21 @@ import type {
   GetChatTranscriptionsTranscriptionIdChatChatIdGetData,
   GetChatTranscriptionsTranscriptionIdChatChatIdGetResponses,
   GetChatTranscriptionsTranscriptionIdChatChatIdGetErrors,
+  ListWorkflowsWorkflowsGetData,
+  ListWorkflowsWorkflowsGetResponses,
+  ListWorkflowsWorkflowsGetErrors,
+  CreateWorkflowRunWorkflowsPostData,
+  CreateWorkflowRunWorkflowsPostResponses,
+  CreateWorkflowRunWorkflowsPostErrors,
+  DeleteWorkflowRunWorkflowsRunIdDeleteData,
+  DeleteWorkflowRunWorkflowsRunIdDeleteResponses,
+  DeleteWorkflowRunWorkflowsRunIdDeleteErrors,
+  GetWorkflowRunWorkflowsRunIdGetData,
+  GetWorkflowRunWorkflowsRunIdGetResponses,
+  GetWorkflowRunWorkflowsRunIdGetErrors,
+  ExecuteWorkflowRunWorkflowsRunIdExecutePostData,
+  ExecuteWorkflowRunWorkflowsRunIdExecutePostResponses,
+  ExecuteWorkflowRunWorkflowsRunIdExecutePostErrors,
 } from './types.gen'
 import { client as _heyApiClient } from './client.gen'
 
@@ -707,5 +722,104 @@ export const getChatTranscriptionsTranscriptionIdChatChatIdGet = <
   >({
     url: '/transcriptions/{transcription_id}/chat/{chat_id}',
     ...options,
+  })
+}
+
+/**
+ * List Workflows
+ */
+export const listWorkflowsWorkflowsGet = <ThrowOnError extends boolean = false>(
+  options?: Options<ListWorkflowsWorkflowsGetData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).get<
+    ListWorkflowsWorkflowsGetResponses,
+    ListWorkflowsWorkflowsGetErrors,
+    ThrowOnError
+  >({
+    url: '/workflows',
+    ...options,
+  })
+}
+
+/**
+ * Create Workflow Run
+ */
+export const createWorkflowRunWorkflowsPost = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CreateWorkflowRunWorkflowsPostData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<
+    CreateWorkflowRunWorkflowsPostResponses,
+    CreateWorkflowRunWorkflowsPostErrors,
+    ThrowOnError
+  >({
+    url: '/workflows',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+}
+
+/**
+ * Delete Workflow Run
+ */
+export const deleteWorkflowRunWorkflowsRunIdDelete = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<DeleteWorkflowRunWorkflowsRunIdDeleteData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).delete<
+    DeleteWorkflowRunWorkflowsRunIdDeleteResponses,
+    DeleteWorkflowRunWorkflowsRunIdDeleteErrors,
+    ThrowOnError
+  >({
+    url: '/workflows/{run_id}',
+    ...options,
+  })
+}
+
+/**
+ * Get Workflow Run
+ */
+export const getWorkflowRunWorkflowsRunIdGet = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<GetWorkflowRunWorkflowsRunIdGetData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).get<
+    GetWorkflowRunWorkflowsRunIdGetResponses,
+    GetWorkflowRunWorkflowsRunIdGetErrors,
+    ThrowOnError
+  >({
+    url: '/workflows/{run_id}',
+    ...options,
+  })
+}
+
+/**
+ * Execute Workflow Run
+ */
+export const executeWorkflowRunWorkflowsRunIdExecutePost = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<
+    ExecuteWorkflowRunWorkflowsRunIdExecutePostData,
+    ThrowOnError
+  >
+) => {
+  return (options.client ?? _heyApiClient).post<
+    ExecuteWorkflowRunWorkflowsRunIdExecutePostResponses,
+    ExecuteWorkflowRunWorkflowsRunIdExecutePostErrors,
+    ThrowOnError
+  >({
+    url: '/workflows/{run_id}/execute',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   })
 }

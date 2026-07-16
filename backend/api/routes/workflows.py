@@ -102,15 +102,16 @@ async def create_workflow_run(
     )
     session.add(run)
     await session.commit()
-    await session.refresh(run)
 
+    run_id = run.id
     llm_queue_service.publish_message(
         WorkerMessage(
-            id=run.id,
+            id=run_id,
             type=TaskType.WORKFLOW_PREPARE,
-            data=WorkflowMessageData(workflow_run_id=run.id),
+            data=WorkflowMessageData(workflow_run_id=run_id),
         )
     )
+    run = await _get_run_with_actions(run_id, session)
     return _run_response(run)
 
 

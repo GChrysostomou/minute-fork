@@ -2,6 +2,7 @@
 
 import { MinuteTab } from '@/app/transcriptions/[transcriptionId]/MinuteTab/MinuteTab'
 import { TranscriptionTab } from '@/app/transcriptions/[transcriptionId]/TranscriptionTab/TranscriptionTab'
+import { WorkflowsTab } from '@/app/transcriptions/[transcriptionId]/WorkflowsTab'
 import { useGovukModule } from '@/hooks/use-govuk-module'
 import { MinuteListItem, Transcription } from '@/lib/client'
 import { useRef } from 'react'
@@ -16,6 +17,8 @@ export function GovukTranscriptionTabs({
   const tabsRef = useRef<HTMLDivElement>(null)
 
   useGovukModule(tabsRef, 'Tabs')
+
+  const workflowsDisabled = transcription.status !== 'completed'
 
   return (
     <div
@@ -35,6 +38,18 @@ export function GovukTranscriptionTabs({
             Transcript
           </a>
         </li>
+        <li
+          className={`govuk-tabs__list-item${workflowsDisabled ? 'govuk-tabs__list-item--disabled' : ''}`}
+          aria-disabled={workflowsDisabled}
+        >
+          <a
+            className="govuk-tabs__tab"
+            href={workflowsDisabled ? undefined : '#workflows'}
+            aria-disabled={workflowsDisabled}
+          >
+            Workflows
+          </a>
+        </li>
       </ul>
       <div className="govuk-tabs__panel" id="summary">
         <MinuteTab transcription={transcription} minutes={minutes} />
@@ -44,6 +59,12 @@ export function GovukTranscriptionTabs({
         id="transcript"
       >
         <TranscriptionTab transcription={transcription} />
+      </div>
+      <div
+        className="govuk-tabs__panel govuk-tabs__panel--hidden"
+        id="workflows"
+      >
+        <WorkflowsTab transcriptionId={transcription.id!} />
       </div>
     </div>
   )

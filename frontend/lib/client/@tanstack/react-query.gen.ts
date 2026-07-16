@@ -30,6 +30,11 @@ import {
   createChatTranscriptionsTranscriptionIdChatPost,
   deleteChatTranscriptionsTranscriptionIdChatChatIdDelete,
   getChatTranscriptionsTranscriptionIdChatChatIdGet,
+  listWorkflowsWorkflowsGet,
+  createWorkflowRunWorkflowsPost,
+  deleteWorkflowRunWorkflowsRunIdDelete,
+  getWorkflowRunWorkflowsRunIdGet,
+  executeWorkflowRunWorkflowsRunIdExecutePost,
 } from '../sdk.gen'
 import {
   queryOptions,
@@ -92,6 +97,17 @@ import type {
   DeleteChatTranscriptionsTranscriptionIdChatChatIdDeleteError,
   DeleteChatTranscriptionsTranscriptionIdChatChatIdDeleteResponse,
   GetChatTranscriptionsTranscriptionIdChatChatIdGetData,
+  ListWorkflowsWorkflowsGetData,
+  CreateWorkflowRunWorkflowsPostData,
+  CreateWorkflowRunWorkflowsPostError,
+  CreateWorkflowRunWorkflowsPostResponse,
+  DeleteWorkflowRunWorkflowsRunIdDeleteData,
+  DeleteWorkflowRunWorkflowsRunIdDeleteError,
+  DeleteWorkflowRunWorkflowsRunIdDeleteResponse,
+  GetWorkflowRunWorkflowsRunIdGetData,
+  ExecuteWorkflowRunWorkflowsRunIdExecutePostData,
+  ExecuteWorkflowRunWorkflowsRunIdExecutePostError,
+  ExecuteWorkflowRunWorkflowsRunIdExecutePostResponse,
 } from '../types.gen'
 import { client as _heyApiClient } from '../client.gen'
 
@@ -1179,4 +1195,181 @@ export const getChatTranscriptionsTranscriptionIdChatChatIdGetOptions = (
     queryKey:
       getChatTranscriptionsTranscriptionIdChatChatIdGetQueryKey(options),
   })
+}
+
+export const listWorkflowsWorkflowsGetQueryKey = (
+  options?: Options<ListWorkflowsWorkflowsGetData>
+) => createQueryKey('listWorkflowsWorkflowsGet', options)
+
+/**
+ * List Workflows
+ */
+export const listWorkflowsWorkflowsGetOptions = (
+  options?: Options<ListWorkflowsWorkflowsGetData>
+) => {
+  return queryOptions({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await listWorkflowsWorkflowsGet({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      })
+      return data
+    },
+    queryKey: listWorkflowsWorkflowsGetQueryKey(options),
+  })
+}
+
+export const createWorkflowRunWorkflowsPostQueryKey = (
+  options: Options<CreateWorkflowRunWorkflowsPostData>
+) => createQueryKey('createWorkflowRunWorkflowsPost', options)
+
+/**
+ * Create Workflow Run
+ */
+export const createWorkflowRunWorkflowsPostOptions = (
+  options: Options<CreateWorkflowRunWorkflowsPostData>
+) => {
+  return queryOptions({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await createWorkflowRunWorkflowsPost({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      })
+      return data
+    },
+    queryKey: createWorkflowRunWorkflowsPostQueryKey(options),
+  })
+}
+
+/**
+ * Create Workflow Run
+ */
+export const createWorkflowRunWorkflowsPostMutation = (
+  options?: Partial<Options<CreateWorkflowRunWorkflowsPostData>>
+): UseMutationOptions<
+  CreateWorkflowRunWorkflowsPostResponse,
+  CreateWorkflowRunWorkflowsPostError,
+  Options<CreateWorkflowRunWorkflowsPostData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CreateWorkflowRunWorkflowsPostResponse,
+    CreateWorkflowRunWorkflowsPostError,
+    Options<CreateWorkflowRunWorkflowsPostData>
+  > = {
+    mutationFn: async (localOptions) => {
+      const { data } = await createWorkflowRunWorkflowsPost({
+        ...options,
+        ...localOptions,
+        throwOnError: true,
+      })
+      return data
+    },
+  }
+  return mutationOptions
+}
+
+/**
+ * Delete Workflow Run
+ */
+export const deleteWorkflowRunWorkflowsRunIdDeleteMutation = (
+  options?: Partial<Options<DeleteWorkflowRunWorkflowsRunIdDeleteData>>
+): UseMutationOptions<
+  DeleteWorkflowRunWorkflowsRunIdDeleteResponse,
+  DeleteWorkflowRunWorkflowsRunIdDeleteError,
+  Options<DeleteWorkflowRunWorkflowsRunIdDeleteData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    DeleteWorkflowRunWorkflowsRunIdDeleteResponse,
+    DeleteWorkflowRunWorkflowsRunIdDeleteError,
+    Options<DeleteWorkflowRunWorkflowsRunIdDeleteData>
+  > = {
+    mutationFn: async (localOptions) => {
+      const { data } = await deleteWorkflowRunWorkflowsRunIdDelete({
+        ...options,
+        ...localOptions,
+        throwOnError: true,
+      })
+      return data
+    },
+  }
+  return mutationOptions
+}
+
+export const getWorkflowRunWorkflowsRunIdGetQueryKey = (
+  options: Options<GetWorkflowRunWorkflowsRunIdGetData>
+) => createQueryKey('getWorkflowRunWorkflowsRunIdGet', options)
+
+/**
+ * Get Workflow Run
+ */
+export const getWorkflowRunWorkflowsRunIdGetOptions = (
+  options: Options<GetWorkflowRunWorkflowsRunIdGetData>
+) => {
+  return queryOptions({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await getWorkflowRunWorkflowsRunIdGet({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      })
+      return data
+    },
+    queryKey: getWorkflowRunWorkflowsRunIdGetQueryKey(options),
+  })
+}
+
+export const executeWorkflowRunWorkflowsRunIdExecutePostQueryKey = (
+  options: Options<ExecuteWorkflowRunWorkflowsRunIdExecutePostData>
+) => createQueryKey('executeWorkflowRunWorkflowsRunIdExecutePost', options)
+
+/**
+ * Execute Workflow Run
+ */
+export const executeWorkflowRunWorkflowsRunIdExecutePostOptions = (
+  options: Options<ExecuteWorkflowRunWorkflowsRunIdExecutePostData>
+) => {
+  return queryOptions({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await executeWorkflowRunWorkflowsRunIdExecutePost({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      })
+      return data
+    },
+    queryKey: executeWorkflowRunWorkflowsRunIdExecutePostQueryKey(options),
+  })
+}
+
+/**
+ * Execute Workflow Run
+ */
+export const executeWorkflowRunWorkflowsRunIdExecutePostMutation = (
+  options?: Partial<Options<ExecuteWorkflowRunWorkflowsRunIdExecutePostData>>
+): UseMutationOptions<
+  ExecuteWorkflowRunWorkflowsRunIdExecutePostResponse,
+  ExecuteWorkflowRunWorkflowsRunIdExecutePostError,
+  Options<ExecuteWorkflowRunWorkflowsRunIdExecutePostData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ExecuteWorkflowRunWorkflowsRunIdExecutePostResponse,
+    ExecuteWorkflowRunWorkflowsRunIdExecutePostError,
+    Options<ExecuteWorkflowRunWorkflowsRunIdExecutePostData>
+  > = {
+    mutationFn: async (localOptions) => {
+      const { data } = await executeWorkflowRunWorkflowsRunIdExecutePost({
+        ...options,
+        ...localOptions,
+        throwOnError: true,
+      })
+      return data
+    },
+  }
+  return mutationOptions
 }
