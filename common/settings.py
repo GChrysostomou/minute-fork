@@ -172,6 +172,14 @@ class Settings(BaseSettings):
         description="The folder where the data directory is mounted for the local storage service.",
     )
 
+    MINUTE_PAT_TOKEN: str | None = Field(
+        default=None,
+        description=(
+            "GitHub Personal Access Token used by the GitHub Projects workflow. "
+            "Must have 'repo' scope. Will be superseded by per-user credentials in a future release."
+        ),
+    )
+
     # use a dotenv file for local development
     if dotenv_detected:
         model_config = SettingsConfigDict(env_file=DOT_ENV_PATH, extra="ignore")

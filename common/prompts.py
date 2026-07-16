@@ -166,3 +166,41 @@ Generate a short title for the meeting
 {transcript_as_speaker_and_utterance(transcript)}
 </transcript>"""
     return [{"role": "user", "content": prompt}]
+
+
+def get_github_workflow_prompt(issues: list[dict], minutes_text: str) -> list[dict[str, str]]:
+    """Build the LLM messages for GithubProjectsWorkflow.prepare().
+
+    Args:
+        issues: List of open GitHub issues as plain dicts with keys:
+                number, title, body, labels, assignees, url.
+        minutes_text: Plain-text meeting minutes (HTML already stripped).
+
+    Returns:
+        A list of message dicts in OpenAI role format ready to pass to
+        chatbot.structured_chat(). The response schema is enforced by the
+        caller via the _ProposedActions Pydantic model.
+    """
+    formatted_issues = "\n".join(f"#{issue['number']}: {issue['title']}\n  {issue.get('body', '')}" for issue in issues)
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are an engineering project manager assistant.\n\n"
+                "Given the current open GitHub issues for the project and the minutes from today's\n"
+                "engineering meeting, identify what ticket changes are needed.\n\n"
+                "For each change, choose one of:\n"
+                "- create_ticket: propose a new ticket (title, body, optional labels)\n"
+                "- update_ticket: modify an existing ticket (issue_number, changes dict)\n"
+                "- close_ticket: close a resolved ticket (issue_number, reason)\n\n"
+                "Rules:\n"
+                "- Only propose a change if the meeting minutes clearly support it.\n"
+                "- Do not hallucinate new information.\n"
+                "- If no changes are needed, return an empty items list."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (f"CURRENT OPEN ISSUES:\n{formatted_issues}\n\n" f"MEETING MINUTES:\n{minutes_text}"),
+        },
+    ]
