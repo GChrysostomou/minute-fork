@@ -13,7 +13,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from backend.api.dependencies.get_session import get_session
-from backend.api.routes.workflows import llm_queue_service
+from backend.api.routes.workflows import workflow_queue_service
 from backend.main import app
 from common.database.postgres_models import WorkflowActionStatus, WorkflowRun, WorkflowStatus
 from common.workflows.workflow_manager import WorkflowManager
@@ -82,7 +82,7 @@ def reset_workflow_registry():
 
 @pytest.fixture
 def mock_queue():
-    with patch.object(llm_queue_service, "publish_message") as mock_pub:
+    with patch.object(workflow_queue_service, "publish_message") as mock_pub:
         yield mock_pub
 
 

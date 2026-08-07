@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     LLM_DEADLETTER_QUEUE_NAME: str = Field(
         description="deadletter queue name to use for SQS. Ignored if using Azure Service Bus "
     )
+    WORKFLOW_QUEUE_NAME: str = Field(description="queue name to use for SQS/Azure Service Bus queues")
+    WORKFLOW_DEADLETTER_QUEUE_NAME: str = Field(
+        description="deadletter queue name to use for SQS. Ignored if using Azure Service Bus "
+    )
 
     AZURE_SPEECH_KEY: str = Field(description="Azure STT speech key for API")
     AZURE_SPEECH_REGION: str = Field(description="Region for Azure STT")

@@ -77,5 +77,33 @@ $AWS sqs set-queue-attributes \
     \"RedrivePolicy\": \"{\\\"deadLetterTargetArn\\\":\\\"$LLM_DEADLETTER_ARN\\\",\\\"maxReceiveCount\\\":\\\"4\\\"}\"
 }"
 
+##############################
+## WORKFLOW QUEUE
+##############################
+
+WORKFLOW_QUEUE_URL=$($AWS sqs create-queue --queue-name "$WORKFLOW_QUEUE_NAME" --query QueueUrl --output text)
+WORKFLOW_DEADLETTER_QUEUE_URL=$($AWS sqs create-queue --queue-name "$WORKFLOW_DEADLETTER_QUEUE_NAME" --query QueueUrl --output text)
+
+echo "Workflow queue URL: $WORKFLOW_QUEUE_URL"
+echo "Workflow Dead letter queue URL: $WORKFLOW_DEADLETTER_QUEUE_URL"
+
+echo "Purging $WORKFLOW_QUEUE_URL"
+$AWS sqs purge-queue --queue-url "$WORKFLOW_QUEUE_URL"
+
+# Derive the dead-letter ARN from the created queue rather than hardcoding the
+# account id, so the redrive policy points at the real queue.
+WORKFLOW_DEADLETTER_ARN=$($AWS sqs get-queue-attributes \
+  --queue-url "$WORKFLOW_DEADLETTER_QUEUE_URL" \
+  --attribute-names QueueArn \
+  --query 'Attributes.QueueArn' --output text)
+
+echo "Workflow Dead letter queue ARN: $WORKFLOW_DEADLETTER_ARN"
+
+$AWS sqs set-queue-attributes \
+--queue-url "$WORKFLOW_QUEUE_URL" \
+--attributes "{
+    \"RedrivePolicy\": \"{\\\"deadLetterTargetArn\\\":\\\"$WORKFLOW_DEADLETTER_ARN\\\",\\\"maxReceiveCount\\\":\\\"4\\\"}\"
+}"
+
 # docker-compose healthcheck waits for this file
 touch "/ready.txt"

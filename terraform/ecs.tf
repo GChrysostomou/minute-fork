@@ -21,6 +21,8 @@ locals {
     "TRANSCRIPTION_DEADLETTER_QUEUE_NAME" : aws_sqs_queue.transcription_queue_deadletter.name
     "LLM_QUEUE_NAME" : aws_sqs_queue.llm_queue.name
     "LLM_DEADLETTER_QUEUE_NAME" : aws_sqs_queue.llm_queue_deadletter.name
+    "WORKFLOW_QUEUE_NAME" : aws_sqs_queue.workflow_queue.name
+    "WORKFLOW_DEADLETTER_QUEUE_NAME" : aws_sqs_queue.workflow_queue_deadletter.name
     "TRANSCRIPTION_SERVICES" : "[\"azure_stt_synchronous\",\"azure_stt_batch\"]"
     "MAX_TRANSCRIPTION_PROCESSES" : local.MAX_TRANSCRIPTION_PROCESSES
     "MAX_LLM_PROCESSES" : local.MAX_LLM_PROCESSES

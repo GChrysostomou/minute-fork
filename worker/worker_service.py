@@ -16,9 +16,15 @@ settings = get_settings()
 
 
 class WorkerService:
-    def __init__(self, transcription_queue_service: QueueService, llm_queue_service: QueueService):
+    def __init__(
+        self,
+        transcription_queue_service: QueueService,
+        llm_queue_service: QueueService,
+        workflow_queue_service: QueueService,
+    ):
         self.transcription_queue_service = transcription_queue_service
         self.llm_queue_service = llm_queue_service
+        self.workflow_queue_service = workflow_queue_service
         self.actors = []
         self.calls = []
         self.signal_handler = SignalHandler()
@@ -38,7 +44,7 @@ class WorkerService:
             self.calls.append(llm_worker_call)
 
         for _ in range(settings.MAX_WORKFLOW_PROCESSES):
-            workflow_worker = RayWorkflowService.remote(self.llm_queue_service, self.stopped)
+            workflow_worker = RayWorkflowService.remote(self.workflow_queue_service, self.stopped)
             workflow_worker_call = workflow_worker.process.remote()
             self.actors.append(workflow_worker)
             self.calls.append(workflow_worker_call)
@@ -82,6 +88,9 @@ def create_worker_service() -> WorkerService:
     llm_sqs_service = get_queue_service(
         settings.QUEUE_SERVICE_NAME, settings.LLM_QUEUE_NAME, settings.LLM_DEADLETTER_QUEUE_NAME
     )
+    workflow_sqs_service = get_queue_service(
+        settings.QUEUE_SERVICE_NAME, settings.WORKFLOW_QUEUE_NAME, settings.WORKFLOW_DEADLETTER_QUEUE_NAME
+    )
     # max concurrent ray processes
     # +4 as we need 2 for the ray Queues, 1 for the HasBeenStopped Actor, plus one 'spare'
     # we init ray here so we can handle its init in testing
@@ -95,4 +104,8 @@ def create_worker_service() -> WorkerService:
         dashboard_port=8265,
         runtime_env={"worker_process_setup_hook": setup_logger},
     )
-    return WorkerService(transcription_queue_service=transcription_sqs_service, llm_queue_service=llm_sqs_service)
+    return WorkerService(
+        transcription_queue_service=transcription_sqs_service,
+        llm_queue_service=llm_sqs_service,
+        workflow_queue_service=workflow_sqs_service,
+    )
