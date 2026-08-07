@@ -31,8 +31,8 @@ from common.workflows.workflow_manager import WorkflowNotFoundError
 
 settings = get_settings()
 
-llm_queue_service = get_queue_service(
-    settings.QUEUE_SERVICE_NAME, settings.LLM_QUEUE_NAME, settings.LLM_DEADLETTER_QUEUE_NAME
+workflow_queue_service = get_queue_service(
+    settings.QUEUE_SERVICE_NAME, settings.WORKFLOW_QUEUE_NAME, settings.WORKFLOW_DEADLETTER_QUEUE_NAME
 )
 
 workflows_router = APIRouter(tags=["Workflows"])
@@ -104,7 +104,7 @@ async def create_workflow_run(
     await session.commit()
 
     run_id = run.id
-    llm_queue_service.publish_message(
+    workflow_queue_service.publish_message(
         WorkerMessage(
             id=run_id,
             type=TaskType.WORKFLOW_PREPARE,
@@ -150,7 +150,7 @@ async def execute_workflow_run(
     await session.commit()
     await session.refresh(run)
 
-    llm_queue_service.publish_message(
+    workflow_queue_service.publish_message(
         WorkerMessage(
             id=run.id,
             type=TaskType.WORKFLOW_EXECUTE,
