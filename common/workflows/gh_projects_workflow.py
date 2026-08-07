@@ -74,6 +74,7 @@ class _UpdateTicketBody(BaseModel):
     body: str | None = None
     # Resolved at prepare()-time
     repo: str = ""  # owner/repo
+    issue_title: str = ""  # current title, for display only
 
 
 class _MoveTicket(BaseModel):
@@ -103,6 +104,7 @@ class _CloseTicket(BaseModel):
     reason: str
     # Resolved at prepare()-time
     repo: str = ""  # owner/repo
+    issue_title: str = ""  # for display only
 
 
 class _ProposedActions(BaseModel):
@@ -278,11 +280,13 @@ def _human_readable(item: _CreateTicket | _UpdateTicketBody | _MoveTicket | _Clo
         return f"Create ticket: {item.title} (→ {item.initial_status})"
     if isinstance(item, _UpdateTicketBody):
         changed = ", ".join(k for k in ("title", "body") if getattr(item, k) is not None)
-        return f"Update #{item.issue_number}: edit {changed}"
+        label = f"#{item.issue_number} '{item.issue_title}'" if item.issue_title else f"#{item.issue_number}"
+        return f"Update {label}: edit {changed}"
     if isinstance(item, _MoveTicket):
         return f"Move #{item.issue_number} '{item.issue_title}': → {item.target_status}"
     if isinstance(item, _CloseTicket):
-        return f"Close #{item.issue_number}: {item.reason}"
+        label = f"#{item.issue_number} '{item.issue_title}'" if item.issue_title else f"#{item.issue_number}"
+        return f"Close {label}: {item.reason}"
     return str(item)
 
 
@@ -487,7 +491,7 @@ class GithubProjectsWorkflow:
                     )
                 )
             elif isinstance(item, _UpdateTicketBody):
-                # Find the matching item to get its repo
+                # Find the matching item to get its repo and current title
                 matched = next((i for i in ctx.items if i.issue_number == item.issue_number), None)
                 resolved.append(
                     _UpdateTicketBody(
@@ -496,6 +500,7 @@ class GithubProjectsWorkflow:
                         title=item.title,
                         body=item.body,
                         repo=matched.repo if matched else ctx.repo,
+                        issue_title=matched.title if matched else "",
                     )
                 )
             elif isinstance(item, _CloseTicket):
@@ -506,6 +511,7 @@ class GithubProjectsWorkflow:
                         issue_number=item.issue_number,
                         reason=item.reason,
                         repo=matched.repo if matched else ctx.repo,
+                        issue_title=matched.title if matched else "",
                     )
                 )
 
