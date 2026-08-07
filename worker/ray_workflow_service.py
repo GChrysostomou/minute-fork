@@ -11,7 +11,7 @@ from common.database.postgres_models import WorkflowActionStatus, WorkflowRun, W
 from common.services.queue_services.base import QueueService
 from common.types import TaskType, WorkerMessage, WorkflowMessageData
 from common.workflows.workflow_manager import WorkflowManager, WorkflowNotFoundError
-from worker.healthcheck import HEARTBEAT_DIR
+from worker.healthcheck import HEARTBEAT_DIR, ensure_heartbeat_dir
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ class RayWorkflowService:
         self.stopped = stopped
         self._core = WorkflowServiceCore(queue_service)
         actor_id = ray.get_runtime_context().get_actor_id()
+        ensure_heartbeat_dir()
         self.heartbeat_path = HEARTBEAT_DIR / f"worker_{actor_id}.heartbeat"
         self.heartbeat_path.touch()
         logger.info("Ray Workflow receive service initialised")
