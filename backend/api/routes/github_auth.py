@@ -7,8 +7,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from backend.api.dependencies import UserDep
-from common.redis_client import set_user_github_token
+from common.redis_client import get_user_github_token, set_user_github_token
 from common.settings import get_settings
+from common.types import GithubAuthStatusResponse
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -18,7 +19,15 @@ github_auth_router = APIRouter(tags=["GitHub Auth"])
 _GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 _GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"  # noqa: S105
 _STATE_COOKIE_NAME = "minute_gh_oauth_state"
+_RETURN_TO_COOKIE_NAME = "minute_gh_oauth_return_to"
 _STATE_COOKIE_TTL_SECONDS = 600
+
+
+def _safe_return_to(path: str | None) -> str:
+    """Only allow same-app relative paths, to rule out this becoming an open redirect."""
+    if path and path.startswith("/") and not path.startswith("//") and "://" not in path:
+        return path
+    return "/"
 
 
 def _require_oauth_app_configured() -> None:
@@ -30,8 +39,21 @@ def _require_oauth_app_configured() -> None:
         raise HTTPException(status_code=500, detail="GitHub OAuth is not configured")
 
 
+@github_auth_router.get("/auth/github/status")
+async def github_status(user: UserDep) -> GithubAuthStatusResponse:
+    """Whether the caller has a live cached GitHub token — lets the frontend decide
+    whether to send the user through GET /auth/github before starting a workflow
+    that needs one, instead of finding out only after it fails.
+    """
+    token = await get_user_github_token(user.id)
+    return GithubAuthStatusResponse(authenticated=bool(token))
+
+
 @github_auth_router.get("/auth/github")
-async def github_login(user: UserDep) -> RedirectResponse:  # noqa: ARG001 — enforces an authenticated Minute session
+async def github_login(
+    user: UserDep,  # noqa: ARG001 — enforces an authenticated Minute session
+    return_to: str | None = None,
+) -> RedirectResponse:
     """Redirect the user to GitHub to authorise this app."""
     _require_oauth_app_configured()
 
@@ -49,6 +71,15 @@ async def github_login(user: UserDep) -> RedirectResponse:  # noqa: ARG001 — e
     response.set_cookie(
         key=_STATE_COOKIE_NAME,
         value=state,
+        max_age=_STATE_COOKIE_TTL_SECONDS,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/",
+    )
+    response.set_cookie(
+        key=_RETURN_TO_COOKIE_NAME,
+        value=_safe_return_to(return_to),
         max_age=_STATE_COOKIE_TTL_SECONDS,
         httponly=True,
         secure=True,
@@ -113,6 +144,8 @@ async def github_callback(
     await set_user_github_token(user.id, access_token, settings.GITHUB_SESSION_TTL_SECONDS)
     logger.info("Cached GitHub OAuth token for user %s", user.id)
 
-    response = RedirectResponse(url=settings.APP_URL, status_code=302)
+    return_to = _safe_return_to(request.cookies.get(_RETURN_TO_COOKIE_NAME))
+    response = RedirectResponse(url=f"{settings.APP_URL}{return_to}", status_code=302)
     response.delete_cookie(key=_STATE_COOKIE_NAME, path="/")
+    response.delete_cookie(key=_RETURN_TO_COOKIE_NAME, path="/")
     return response

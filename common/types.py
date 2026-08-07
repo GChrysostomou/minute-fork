@@ -305,3 +305,7 @@ class WorkflowMetadata(BaseModel):
     display_name: str
     description: str
     config_schema: dict
+
+
+class GithubAuthStatusResponse(BaseModel):
+    authenticated: bool

@@ -1,9 +1,18 @@
 'use client'
 
-import { listWorkflowsWorkflowsGetOptions } from '@/lib/client/@tanstack/react-query.gen'
+import {
+  githubStatusAuthGithubStatusGetOptions,
+  listWorkflowsWorkflowsGetOptions,
+} from '@/lib/client/@tanstack/react-query.gen'
 import { WorkflowMetadata } from '@/lib/client'
+import { API_PROXY_PATH } from '@/lib/api-proxy-path'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
+import { usePathname } from 'next/navigation'
+
+// The only workflow today that calls out to an external service on the
+// user's behalf, so it's the only one gated on a connected GitHub account.
+const GITHUB_WORKFLOW_NAME = 'github_projects'
 
 interface WorkflowSelectorProps {
   onSelect: (
@@ -13,6 +22,7 @@ interface WorkflowSelectorProps {
 }
 
 export function WorkflowSelector({ onSelect }: WorkflowSelectorProps) {
+  const pathname = usePathname()
   const {
     data: workflows = [],
     isLoading,
@@ -21,6 +31,23 @@ export function WorkflowSelector({ onSelect }: WorkflowSelectorProps) {
     ...listWorkflowsWorkflowsGetOptions(),
     staleTime: Infinity,
   })
+
+  const needsGithubAuth = workflows.some((w) => w.name === GITHUB_WORKFLOW_NAME)
+  const { data: githubStatus } = useQuery({
+    ...githubStatusAuthGithubStatusGetOptions(),
+    enabled: needsGithubAuth,
+  })
+
+  function handleSelect(workflow: WorkflowMetadata) {
+    if (
+      workflow.name === GITHUB_WORKFLOW_NAME &&
+      !githubStatus?.authenticated
+    ) {
+      window.location.href = `${API_PROXY_PATH}/auth/github?return_to=${encodeURIComponent(pathname)}`
+      return
+    }
+    onSelect(workflow.name, workflow.config_schema as Record<string, unknown>)
+  }
 
   if (isLoading) {
     return (
@@ -64,14 +91,12 @@ export function WorkflowSelector({ onSelect }: WorkflowSelectorProps) {
                 <p className="govuk-body">{workflow.description}</p>
                 <button
                   className="govuk-button govuk-button--secondary govuk-!-margin-bottom-0"
-                  onClick={() =>
-                    onSelect(
-                      workflow.name,
-                      workflow.config_schema as Record<string, unknown>
-                    )
-                  }
+                  onClick={() => handleSelect(workflow)}
                 >
-                  Select
+                  {workflow.name === GITHUB_WORKFLOW_NAME &&
+                  !githubStatus?.authenticated
+                    ? 'Connect GitHub'
+                    : 'Select'}
                 </button>
               </div>
             </div>
