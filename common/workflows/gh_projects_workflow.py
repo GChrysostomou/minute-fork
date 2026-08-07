@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http
 import logging
 import re
 from typing import ClassVar, Literal
@@ -377,6 +378,25 @@ async def _execute_create_ticket(
     return html_url
 
 
+def _friendly_403_message(org: str) -> str:
+    approve_url = f"https://github.com/settings/connections/applications/{settings.GITHUB_OAUTH_CLIENT_ID}"
+    return (
+        f"GitHub denied access to the '{org}' organisation (403 Forbidden). This usually means "
+        f"your org admin hasn't approved this app for '{org}' yet — request access at {approve_url}, "
+        "or ask an org admin to approve it under the org's Settings > Third-party access."
+    )
+
+
+async def _fetch_project_items_or_raise(org: str, project_number: int, token: str) -> _ProjectContext:
+    """Wraps _fetch_project_items to turn a 403 into an actionable error message."""
+    try:
+        return await _fetch_project_items(org, project_number, token)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == http.HTTPStatus.FORBIDDEN:
+            raise ValueError(_friendly_403_message(org)) from exc
+        raise
+
+
 class GithubProjectsWorkflow:
     name = "github_projects"
     display_name = "GitHub Projects"
@@ -423,7 +443,7 @@ class GithubProjectsWorkflow:
             raise ValueError(msg)
 
         # 1. Fetch project items + status field metadata
-        ctx = await _fetch_project_items(org, project_number, token)
+        ctx = await _fetch_project_items_or_raise(org, project_number, token)
 
         # 2. Load the latest completed minutes as plain text
         minutes_text = _load_latest_minutes_text(run.transcription_id)
@@ -559,63 +579,68 @@ class GithubProjectsWorkflow:
 
         headers = _gh_headers(token)
 
-        async with httpx.AsyncClient(base_url=_GITHUB_API_BASE, headers=headers) as client:
-            match action_type:
-                case "create_ticket":
-                    return await _execute_create_ticket(client, payload, repo, org, project_number, token)
+        try:
+            async with httpx.AsyncClient(base_url=_GITHUB_API_BASE, headers=headers) as client:
+                match action_type:
+                    case "create_ticket":
+                        return await _execute_create_ticket(client, payload, repo, org, project_number, token)
 
-                case "update_ticket_body":
-                    owner, repo_name = repo.split("/", 1)
-                    issue_number: int = payload["issue_number"]
-                    body: dict = {
-                        k: v
-                        for k, v in {"title": payload.get("title"), "body": payload.get("body")}.items()
-                        if v is not None
-                    }
-                    logger.info("PATCH /repos/%s/issues/%d fields=%s", repo, issue_number, list(body))
-                    response = await client.patch(
-                        f"/repos/{owner}/{repo_name}/issues/{issue_number}",
-                        json=body,
-                    )
-                    logger.info("  → %s %s", response.status_code, response.reason_phrase)
-                    response.raise_for_status()
-                    return response.json()["html_url"]
+                    case "update_ticket_body":
+                        owner, repo_name = repo.split("/", 1)
+                        issue_number: int = payload["issue_number"]
+                        body: dict = {
+                            k: v
+                            for k, v in {"title": payload.get("title"), "body": payload.get("body")}.items()
+                            if v is not None
+                        }
+                        logger.info("PATCH /repos/%s/issues/%d fields=%s", repo, issue_number, list(body))
+                        response = await client.patch(
+                            f"/repos/{owner}/{repo_name}/issues/{issue_number}",
+                            json=body,
+                        )
+                        logger.info("  → %s %s", response.status_code, response.reason_phrase)
+                        response.raise_for_status()
+                        return response.json()["html_url"]
 
-                case "move_ticket":
-                    # All IDs were resolved at prepare()-time — this is a dumb REST PATCH
-                    item_id: int = payload["item_id"]
-                    status_field_id: int = payload["status_field_id"]
-                    target_option_id: str = payload["target_option_id"]
-                    target_status: str = payload["target_status"]
-                    logger.info(
-                        "PATCH /orgs/%s/projectsV2/%d/items/%d → %r",
-                        org,
-                        project_number,
-                        item_id,
-                        target_status,
-                    )
-                    response = await client.patch(
-                        f"/orgs/{org}/projectsV2/{project_number}/items/{item_id}",
-                        json={"fields": [{"id": status_field_id, "value": target_option_id}]},
-                    )
-                    logger.info("  → %s %s", response.status_code, response.reason_phrase)
-                    response.raise_for_status()
-                    response.json()
-                    # Project item PATCH returns the item, not an issue — no html_url
-                    return None
+                    case "move_ticket":
+                        # All IDs were resolved at prepare()-time — this is a dumb REST PATCH
+                        item_id: int = payload["item_id"]
+                        status_field_id: int = payload["status_field_id"]
+                        target_option_id: str = payload["target_option_id"]
+                        target_status: str = payload["target_status"]
+                        logger.info(
+                            "PATCH /orgs/%s/projectsV2/%d/items/%d → %r",
+                            org,
+                            project_number,
+                            item_id,
+                            target_status,
+                        )
+                        response = await client.patch(
+                            f"/orgs/{org}/projectsV2/{project_number}/items/{item_id}",
+                            json={"fields": [{"id": status_field_id, "value": target_option_id}]},
+                        )
+                        logger.info("  → %s %s", response.status_code, response.reason_phrase)
+                        response.raise_for_status()
+                        response.json()
+                        # Project item PATCH returns the item, not an issue — no html_url
+                        return None
 
-                case "close_ticket":
-                    owner, repo_name = repo.split("/", 1)
-                    issue_number = payload["issue_number"]
-                    logger.info("PATCH /repos/%s/issues/%d state=closed", repo, issue_number)
-                    response = await client.patch(
-                        f"/repos/{owner}/{repo_name}/issues/{issue_number}",
-                        json={"state": "closed", "state_reason": "completed"},
-                    )
-                    logger.info("  → %s %s", response.status_code, response.reason_phrase)
-                    response.raise_for_status()
-                    return response.json()["html_url"]
+                    case "close_ticket":
+                        owner, repo_name = repo.split("/", 1)
+                        issue_number = payload["issue_number"]
+                        logger.info("PATCH /repos/%s/issues/%d state=closed", repo, issue_number)
+                        response = await client.patch(
+                            f"/repos/{owner}/{repo_name}/issues/{issue_number}",
+                            json={"state": "closed", "state_reason": "completed"},
+                        )
+                        logger.info("  → %s %s", response.status_code, response.reason_phrase)
+                        response.raise_for_status()
+                        return response.json()["html_url"]
 
-                case _:
-                    msg = f"Unknown action_type: {action_type!r}"
-                    raise ValueError(msg)
+                    case _:
+                        msg = f"Unknown action_type: {action_type!r}"
+                        raise ValueError(msg)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == http.HTTPStatus.FORBIDDEN:
+                raise ValueError(_friendly_403_message(org)) from exc
+            raise

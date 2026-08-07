@@ -256,3 +256,25 @@ class TestExecuteActionEdgeCases:
             pytest.raises(httpx.HTTPStatusError),
         ):
             await GithubProjectsWorkflow.execute_action(action)
+
+    @pytest.mark.asyncio
+    async def test_403_raises_friendly_org_access_error(self):
+        """A 403 (org hasn't approved the OAuth App) is rewritten into an actionable ValueError."""
+        action = _make_action(
+            "close_ticket",
+            {"issue_number": 1, "reason": "done"},
+            config={"org": "myorg", "repo": "myorg/myrepo", "project_number": 1},
+        )
+        mock_response = _mock_response(403)
+
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.patch = AsyncMock(return_value=mock_response)
+
+        with (
+            _patch_github_token(),
+            patch("common.workflows.gh_projects_workflow.httpx.AsyncClient", return_value=mock_client),
+            pytest.raises(ValueError, match="myorg"),
+        ):
+            await GithubProjectsWorkflow.execute_action(action)

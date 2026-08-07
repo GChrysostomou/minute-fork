@@ -8,6 +8,7 @@ as context managers, consistent with the existing codebase pattern.
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from common.database.postgres_models import WorkflowRun
@@ -326,6 +327,27 @@ class TestPrepare:
         run = _make_run()
         patches = _patch_all(fake_token=None)
         with patches[0], patches[1], patches[2], patches[3], pytest.raises(ValueError, match="GitHub session"):
+            await GithubProjectsWorkflow.prepare(run)
+
+    @pytest.mark.asyncio
+    async def test_403_raises_friendly_org_access_error(self):
+        """A 403 from GitHub (org hasn't approved the OAuth App) is rewritten into an actionable ValueError."""
+        from common.workflows.gh_projects_workflow import GithubProjectsWorkflow
+
+        run = _make_run()
+        forbidden_response = MagicMock(status_code=403)
+        forbidden_error = httpx.HTTPStatusError("403", request=MagicMock(), response=forbidden_response)
+        patches = (
+            patch(
+                "common.workflows.gh_projects_workflow.get_user_github_token",
+                new=AsyncMock(return_value="fake-token"),
+            ),
+            patch(
+                "common.workflows.gh_projects_workflow._fetch_project_items",
+                new=AsyncMock(side_effect=forbidden_error),
+            ),
+        )
+        with patches[0], patches[1], pytest.raises(ValueError, match="myorg"):
             await GithubProjectsWorkflow.prepare(run)
 
     @pytest.mark.asyncio
