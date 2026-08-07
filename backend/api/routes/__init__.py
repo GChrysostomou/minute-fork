@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from .chat import chat_router
+from .github_auth import github_auth_router
 from .health import health_router
 from .minutes import minutes_router
 from .templates import templates_router
@@ -17,3 +18,4 @@ router.include_router(minutes_router)
 router.include_router(templates_router)
 router.include_router(chat_router)
 router.include_router(workflows_router)
+router.include_router(github_auth_router)

@@ -172,13 +172,29 @@ class Settings(BaseSettings):
         description="The folder where the data directory is mounted for the local storage service.",
     )
 
-    MINUTE_PAT_TOKEN: str | None = Field(
+    # GitHub OAuth (per-user token flow — see backend/api/routes/github_auth.py)
+    GITHUB_OAUTH_CLIENT_ID: str | None = Field(
+        default=None, description="Client ID of the GitHub OAuth App used for user-delegated GitHub access"
+    )
+    GITHUB_OAUTH_CLIENT_SECRET: str | None = Field(
+        default=None, description="Client secret of the GitHub OAuth App used for user-delegated GitHub access"
+    )
+    GITHUB_OAUTH_REDIRECT_URI: str | None = Field(
         default=None,
         description=(
-            "GitHub Personal Access Token used by the GitHub Projects workflow. "
-            "Must have 'repo' scope. Will be superseded by per-user credentials in a future release."
+            "Absolute callback URL registered with the GitHub OAuth App, "
+            "e.g. https://minute.example.gov.uk/api/auth/github/callback"
         ),
     )
+    GITHUB_OAUTH_SCOPES: str = Field(default="project", description="Space-separated GitHub OAuth scopes to request")
+    GITHUB_SESSION_TTL_SECONDS: int = Field(
+        default=60 * 60 * 24, description="TTL applied to the Redis-cached GitHub access token"
+    )
+
+    # Redis, used to cache per-user GitHub OAuth access tokens
+    REDIS_HOST: str = Field(default="localhost", description="Redis host")
+    REDIS_PORT: int = Field(default=6379, description="Redis port")
+    REDIS_SSL: bool = Field(default=False, description="Whether to connect to Redis over TLS")
 
     # use a dotenv file for local development
     if dotenv_detected:

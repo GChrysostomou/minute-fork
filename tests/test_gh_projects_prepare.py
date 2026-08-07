@@ -183,6 +183,7 @@ def _make_run(config: dict | None = None) -> WorkflowRun:
     """Build a minimal mock WorkflowRun."""
     run = MagicMock(spec=WorkflowRun)
     run.id = uuid.uuid4()
+    run.user_id = uuid.uuid4()
     run.transcription_id = uuid.uuid4()
     run.config = (
         config
@@ -212,8 +213,8 @@ def _patch_all(
     """Return a tuple of patches for all external dependencies of prepare()."""
     return (
         patch(
-            "common.workflows.gh_projects_workflow.get_settings",
-            return_value=MagicMock(MINUTE_PAT_TOKEN=fake_token),
+            "common.workflows.gh_projects_workflow.get_user_github_token",
+            new=AsyncMock(return_value=fake_token),
         ),
         patch(
             "common.workflows.gh_projects_workflow._fetch_project_items",
@@ -318,13 +319,13 @@ class TestPrepare:
         assert actions == []
 
     @pytest.mark.asyncio
-    async def test_raises_when_pat_token_missing(self):
-        """When MINUTE_PAT_TOKEN is None, prepare() raises ValueError immediately."""
+    async def test_raises_when_github_token_missing(self):
+        """When the user has no cached GitHub token, prepare() raises ValueError immediately."""
         from common.workflows.gh_projects_workflow import GithubProjectsWorkflow
 
         run = _make_run()
         patches = _patch_all(fake_token=None)
-        with patches[0], patches[1], patches[2], patches[3], pytest.raises(ValueError, match="MINUTE_PAT_TOKEN"):
+        with patches[0], patches[1], patches[2], patches[3], pytest.raises(ValueError, match="GitHub session"):
             await GithubProjectsWorkflow.prepare(run)
 
     @pytest.mark.asyncio
@@ -378,8 +379,8 @@ class TestPrepare:
 
         patches = (
             patch(
-                "common.workflows.gh_projects_workflow.get_settings",
-                return_value=MagicMock(MINUTE_PAT_TOKEN="fake-token"),
+                "common.workflows.gh_projects_workflow.get_user_github_token",
+                new=AsyncMock(return_value="fake-token"),
             ),
             patch(
                 "common.workflows.gh_projects_workflow._fetch_project_items",

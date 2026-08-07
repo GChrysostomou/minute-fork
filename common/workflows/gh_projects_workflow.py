@@ -21,9 +21,11 @@ from common.database.postgres_models import (
 )
 from common.llm.client import FastOrBestLLM, create_default_chatbot
 from common.prompts import get_github_workflow_prompt
+from common.redis_client import get_user_github_token
 from common.settings import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 _GITHUB_API_BASE = "https://api.github.com"
 
@@ -398,12 +400,11 @@ class GithubProjectsWorkflow:
     @classmethod
     async def prepare(cls, run: WorkflowRun) -> list[WorkflowAction]:
         """Fetch project items, call the LLM, return proposed actions."""
-        settings = get_settings()
-
-        token = settings.MINUTE_PAT_TOKEN
+        token = await get_user_github_token(run.user_id)
         if not token:
             msg = (
-                "MINUTE_PAT_TOKEN is not configured. " "Set it in your environment to use the GitHub Projects workflow."
+                "No GitHub session for this user. They must connect their GitHub account "
+                "via GET /auth/github before running the GitHub Projects workflow."
             )
             raise ValueError(msg)
 
@@ -534,10 +535,12 @@ class GithubProjectsWorkflow:
         (which operates on the project item, not the issue directly).
         Raises httpx.HTTPStatusError on 4xx/5xx responses.
         """
-        settings = get_settings()
-        token = settings.MINUTE_PAT_TOKEN
+        token = await get_user_github_token(action.workflow_run.user_id)
         if not token:
-            msg = "MINUTE_PAT_TOKEN is not configured."
+            msg = (
+                "No GitHub session for this user. They must connect their GitHub account "
+                "via GET /auth/github before running the GitHub Projects workflow."
+            )
             raise ValueError(msg)
 
         payload = action.payload

@@ -39,10 +39,10 @@ def _mock_response(status_code: int = 200, json_body: dict | None = None) -> Mag
     return response
 
 
-def _patch_settings(token: str | None = "fake-token"):  # noqa: S107
+def _patch_github_token(token: str | None = "fake-token"):  # noqa: S107
     return patch(
-        "common.workflows.gh_projects_workflow.get_settings",
-        return_value=MagicMock(MINUTE_PAT_TOKEN=token),
+        "common.workflows.gh_projects_workflow.get_user_github_token",
+        new=AsyncMock(return_value=token),
     )
 
 
@@ -63,7 +63,7 @@ class TestExecuteActionCreateTicket:
         mock_client.post = AsyncMock(side_effect=[issue_response, add_response])
 
         with (
-            _patch_settings(),
+            _patch_github_token(),
             patch("common.workflows.gh_projects_workflow.httpx.AsyncClient", return_value=mock_client),
         ):
             result = await GithubProjectsWorkflow.execute_action(action)
@@ -98,7 +98,7 @@ class TestExecuteActionCreateTicket:
 
         fake_field = (5, {"In Progress": "opt_ip", "Todo": "opt_todo"})
         with (
-            _patch_settings(),
+            _patch_github_token(),
             patch("common.workflows.gh_projects_workflow.httpx.AsyncClient", return_value=mock_client),
             patch("common.workflows.gh_projects_workflow._fetch_status_field", new=AsyncMock(return_value=fake_field)),
         ):
@@ -126,7 +126,7 @@ class TestExecuteActionUpdateTicketBody:
         mock_client.patch = AsyncMock(return_value=mock_response)
 
         with (
-            _patch_settings(),
+            _patch_github_token(),
             patch("common.workflows.gh_projects_workflow.httpx.AsyncClient", return_value=mock_client),
         ):
             result = await GithubProjectsWorkflow.execute_action(action)
@@ -151,7 +151,7 @@ class TestExecuteActionUpdateTicketBody:
         mock_client.patch = AsyncMock(return_value=mock_response)
 
         with (
-            _patch_settings(),
+            _patch_github_token(),
             patch("common.workflows.gh_projects_workflow.httpx.AsyncClient", return_value=mock_client),
         ):
             await GithubProjectsWorkflow.execute_action(action)
@@ -183,7 +183,7 @@ class TestExecuteActionMoveTicket:
         mock_client.patch = AsyncMock(return_value=mock_response)
 
         with (
-            _patch_settings(),
+            _patch_github_token(),
             patch("common.workflows.gh_projects_workflow.httpx.AsyncClient", return_value=mock_client),
         ):
             result = await GithubProjectsWorkflow.execute_action(action)
@@ -212,7 +212,7 @@ class TestExecuteActionCloseTicket:
         mock_client.patch = AsyncMock(return_value=mock_response)
 
         with (
-            _patch_settings(),
+            _patch_github_token(),
             patch("common.workflows.gh_projects_workflow.httpx.AsyncClient", return_value=mock_client),
         ):
             result = await GithubProjectsWorkflow.execute_action(action)
@@ -225,15 +225,15 @@ class TestExecuteActionCloseTicket:
 
 class TestExecuteActionEdgeCases:
     @pytest.mark.asyncio
-    async def test_raises_when_pat_token_missing(self):
+    async def test_raises_when_github_token_missing(self):
         action = _make_action("close_ticket", {"issue_number": 1, "reason": "done"})
-        with _patch_settings(token=None), pytest.raises(ValueError, match="MINUTE_PAT_TOKEN"):
+        with _patch_github_token(token=None), pytest.raises(ValueError, match="GitHub session"):
             await GithubProjectsWorkflow.execute_action(action)
 
     @pytest.mark.asyncio
     async def test_raises_on_unknown_action_type(self):
         action = _make_action("delete_repo", {})
-        with _patch_settings(), pytest.raises(ValueError, match="Unknown action_type"):
+        with _patch_github_token(), pytest.raises(ValueError, match="Unknown action_type"):
             await GithubProjectsWorkflow.execute_action(action)
 
     @pytest.mark.asyncio
@@ -251,7 +251,7 @@ class TestExecuteActionEdgeCases:
         mock_client.patch = AsyncMock(return_value=mock_response)
 
         with (
-            _patch_settings(),
+            _patch_github_token(),
             patch("common.workflows.gh_projects_workflow.httpx.AsyncClient", return_value=mock_client),
             pytest.raises(httpx.HTTPStatusError),
         ):

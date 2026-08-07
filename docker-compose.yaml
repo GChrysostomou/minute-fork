@@ -12,10 +12,14 @@ services:
       - MINISTACK_URL=http://ministack:4566
       - STORAGE_SERVICE_NAME=local
       - LOCAL_STORAGE_PATH=/static
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       db:
         condition: service_healthy
       ministack:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - type: bind
@@ -62,11 +66,15 @@ services:
       - MINISTACK_URL=http://ministack:4566
       - STORAGE_SERVICE_NAME=local
       - LOCAL_STORAGE_PATH=/static
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     stop_grace_period: 10s
     depends_on:
       db:
         condition: service_healthy
       ministack:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       # Direct interpreter call (venv is on PATH); avoids `uv run` touching
@@ -133,6 +141,17 @@ services:
       timeout: 30s
       retries: 24
       start_period: 30s
+
+  redis: # caches per-user GitHub OAuth access tokens (see common/redis_client.py)
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   ministack: # MiniStack container (LocalStack-compatible AWS emulator)
     image: ministackorg/ministack:latest
