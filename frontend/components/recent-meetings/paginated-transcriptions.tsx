@@ -79,14 +79,11 @@ export const PaginatedTranscriptions = () => {
             className="govuk-select"
             id="filter"
             name="filter"
+            value={expiring ? 'expiring' : 'all'}
             onChange={handleFilterChange}
           >
-            <option value="all" selected={!expiring}>
-              All
-            </option>
-            <option value="expiring" selected={expiring}>
-              Expiring soon
-            </option>
+            <option value="all">All</option>
+            <option value="expiring">Expiring soon</option>
           </select>
         </div>
         <p className="govuk-body govuk-!-margin-bottom-0">
